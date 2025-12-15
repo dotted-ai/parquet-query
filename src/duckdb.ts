@@ -55,3 +55,8 @@ export async function query(sql: string): Promise<Table> {
   const { conn } = await getDuckDB();
   return (await conn.query(sql)) as unknown as Table;
 }
+
+export async function exec(sql: string): Promise<void> {
+  const { conn } = await getDuckDB();
+  await conn.query(sql);
+}

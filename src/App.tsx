@@ -5,12 +5,14 @@ import {
   collectFilesFromFileList,
   type ImportedFile,
 } from './fileImport';
-import { getDuckDB, query, registerFileBuffer } from './duckdb';
+import { exec, getDuckDB, query, registerFileBuffer } from './duckdb';
 
 const DEFAULT_SQL = `-- Dica: você pode consultar arquivos diretamente pelo caminho registrado.
 -- Exemplos:
 --   SELECT * FROM 'meus_dados/arquivo.parquet' LIMIT 50;
 --   SELECT COUNT(*) FROM 'meus_dados/arquivo.csv';
+-- Se você der um nome para a tabela no import, pode consultar tudo de uma vez:
+--   SELECT * FROM minha_tabela LIMIT 50;
 
 SELECT 42 AS ok;`;
 
@@ -25,14 +27,33 @@ function bytes(size: number) {
   return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
 }
 
+function sqlStringLiteral(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function sqlIdentifier(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error('Nome da tabela vazio');
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) return trimmed;
+  return `"${trimmed.replaceAll('"', '""')}"`;
+}
+
+function parquetPaths(imported: ImportedFile[]) {
+  return imported
+    .filter((f) => f.path.toLowerCase().endsWith('.parquet'))
+    .map((f) => f.path);
+}
+
 export default function App() {
   const [dbStatus, setDbStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
   const [files, setFiles] = useState<ImportedFile[]>([]);
   const [folderName, setFolderName] = useState<string>('');
+  const [parquetTableName, setParquetTableName] = useState<string>('');
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string>('');
   const [resultInfo, setResultInfo] = useState<string>('');
+  const [importInfo, setImportInfo] = useState<string>('');
   const [table, setTable] = useState<{ columns: string[]; rows: string[][] }>();
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -54,9 +75,23 @@ export default function App() {
     }
   }
 
+  async function createOrReplaceParquetView(imported: ImportedFile[], tableName: string) {
+    const name = tableName.trim();
+    if (!name) return;
+    const paths = parquetPaths(imported);
+    if (paths.length === 0) {
+      throw new Error('Nenhum arquivo .parquet encontrado para criar a tabela.');
+    }
+    const ident = sqlIdentifier(name);
+    const list = `[${paths.map(sqlStringLiteral).join(', ')}]`;
+    await exec(`CREATE OR REPLACE VIEW ${ident} AS SELECT * FROM read_parquet(${list});`);
+    setImportInfo(`Tabela ${name} criada com ${paths.length} parquet(s).`);
+  }
+
   async function importFiles(selectedFiles: File[], meta: ImportedFile[], label: string) {
     setError('');
     setResultInfo('');
+    setImportInfo('');
     setTable(undefined);
 
     await ensureDbReady();
@@ -72,6 +107,7 @@ export default function App() {
 
     setFolderName(label);
     setFiles(imported);
+    await createOrReplaceParquetView(imported, parquetTableName);
   }
 
   async function onPickFolder() {
@@ -125,6 +161,17 @@ export default function App() {
     }
   }
 
+  async function onCreateTable() {
+    setError('');
+    setImportInfo('');
+    try {
+      await ensureDbReady();
+      await createOrReplaceParquetView(files, parquetTableName);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  }
+
   return (
     <div className="container">
       <div className="header">
@@ -147,12 +194,27 @@ export default function App() {
             <button onClick={onPickFolder} disabled={dbStatus === 'loading'}>
               {supportsDirectoryPicker ? 'Selecionar pasta' : 'Selecionar pasta (fallback)'}
             </button>
+            <input
+              value={parquetTableName}
+              onChange={(e) => setParquetTableName(e.target.value)}
+              placeholder="Nome da tabela (opcional)"
+              style={{ minWidth: 220 }}
+            />
+            <button
+              className="secondary"
+              onClick={onCreateTable}
+              disabled={dbStatus !== 'ready' || files.length === 0}
+              title="Cria/atualiza uma VIEW com todos os arquivos .parquet importados"
+            >
+              Criar tabela
+            </button>
             <button
               className="secondary"
               onClick={() => {
                 setFiles([]);
                 setFolderName('');
                 setResultInfo('');
+                setImportInfo('');
                 setTable(undefined);
                 setError('');
               }}
@@ -162,6 +224,7 @@ export default function App() {
             </button>
             {folderName ? <span className="pill">{folderName}</span> : null}
             {files.length ? <span className="pill">{files.length} arquivos</span> : null}
+            {importInfo ? <span className="pill ok">{importInfo}</span> : null}
           </div>
 
           <input

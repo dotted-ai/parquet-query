@@ -20,11 +20,13 @@ Abra a URL mostrada pelo Vite.
 ## Como usar
 
 1. Clique em **Selecionar pasta** e escolha uma pasta com arquivos (`.parquet`, `.csv`, `.json`, `.ndjson`)
-2. Rode queries consultando os arquivos diretamente pelo caminho importado:
+2. (Opcional) Preencha **Nome da tabela** para criar uma VIEW com **todos os `.parquet`** importados
+3. Rode queries consultando os arquivos diretamente pelo caminho importado ou pela tabela:
 
 ```sql
 SELECT * FROM 'minha_pasta/arquivo.parquet' LIMIT 50;
 SELECT COUNT(*) FROM 'minha_pasta/arquivo.csv';
+SELECT COUNT(*) FROM minha_tabela;
 ```
 
 ## Observações
