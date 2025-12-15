@@ -195,10 +195,11 @@ export default function App() {
               {supportsDirectoryPicker ? '📂 Selecionar pasta' : '📂 Selecionar pasta (fallback)'}
             </button>
             <input
+              type="text"
+              className="table-name-input"
               value={parquetTableName}
               onChange={(e) => setParquetTableName(e.target.value)}
               placeholder="Nome da tabela (opcional)"
-              style={{ minWidth: 220 }}
             />
             <button
               className="secondary"

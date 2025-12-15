@@ -187,6 +187,8 @@ input[type='text'] {
   font-size: 14px;
   transition: all 0.2s ease;
   outline: none;
+  flex: 1;
+  min-width: 0;
 }
 
 input[type='text']:focus {
@@ -197,6 +199,44 @@ input[type='text']:focus {
 
 input[type='text']::placeholder {
   color: var(--text-muted);
+}
+
+.table-name-input {
+  min-width: 240px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.6) 100%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.table-name-input:hover:not(:focus) {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.7) 100%);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.table-name-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15), var(--shadow-md);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.8) 100%);
+  transform: translateY(-1px);
+}
+
+.table-name-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.table-name-input:focus::placeholder {
+  opacity: 0.5;
 }
 
 textarea {
