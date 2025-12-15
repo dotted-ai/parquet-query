@@ -3,13 +3,13 @@ import CodeMirror from '@uiw/react-codemirror';
 import { sql as sqlLanguage } from '@codemirror/lang-sql';
 import { EditorView, keymap } from '@codemirror/view';
 import { defaultKeymap } from '@codemirror/commands';
-import { tableToRows } from './arrow';
+import { recordBatchesToCSVParts, tableToRows } from './arrow';
 import {
   collectFilesFromDirectoryHandle,
   collectFilesFromFileList,
   type ImportedFile,
 } from './fileImport';
-import { exec, getDuckDB, query, registerFileBuffer } from './duckdb';
+import { exec, getDuckDB, query, registerFileBuffer, send } from './duckdb';
 
 const DEFAULT_SQL = `-- Dica: você pode consultar arquivos diretamente pelo caminho registrado.
 -- Exemplos:
@@ -55,6 +55,7 @@ export default function App() {
   const [parquetTableName, setParquetTableName] = useState<string>('');
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [running, setRunning] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string>('');
   const [resultInfo, setResultInfo] = useState<string>('');
   const [importInfo, setImportInfo] = useState<string>('');
@@ -168,6 +169,34 @@ export default function App() {
       setError(e?.message || String(e));
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function exportCSV() {
+    setError('');
+    setExporting(true);
+    try {
+      await ensureDbReady();
+      const batches = await send(sql);
+      const { parts, rows } = await recordBatchesToCSVParts(batches);
+      const blob = new Blob(parts, { type: 'text/csv;charset=utf-8' });
+      const fileName = `query-${new Date().toISOString().replaceAll(':', '-')}.csv`;
+      const url = URL.createObjectURL(blob);
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      setResultInfo(`CSV exportado: ${rows.toLocaleString()} linhas`);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -401,8 +430,11 @@ export default function App() {
             />
           </div>
           <div className="row" style={{ marginTop: 10 }}>
-            <button onClick={runQuery} disabled={running}>
+            <button onClick={runQuery} disabled={running || exporting}>
               {running ? '⏳ Executando…' : '▶️ Executar'}
+            </button>
+            <button className="secondary" onClick={exportCSV} disabled={running || exporting}>
+              {exporting ? '⏳ Exportando…' : '⬇️ Exportar CSV'}
             </button>
             {resultInfo ? <span className="pill ok">{resultInfo}</span> : null}
           </div>

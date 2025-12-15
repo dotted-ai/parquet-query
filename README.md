@@ -31,6 +31,10 @@ SELECT COUNT(*) FROM 'minha_pasta/arquivo.csv';
 SELECT COUNT(*) FROM minha_tabela;
 ```
 
+## Exportar CSV
+
+Rode uma query e clique em **Exportar CSV** para baixar o resultado em `.csv`.
+
 ## Observações
 
 - O DuckDB-WASM (worker/wasm) é baixado do jsDelivr na primeira vez (precisa de internet).

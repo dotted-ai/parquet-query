@@ -52,3 +52,8 @@ export async function exec(sql: string): Promise<void> {
   const { conn } = await getDuckDB();
   await conn.query(sql);
 }
+
+export async function send(sql: string) {
+  const { conn } = await getDuckDB();
+  return await conn.send(sql);
+}
