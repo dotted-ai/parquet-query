@@ -175,24 +175,24 @@ export default function App() {
   return (
     <div className="container">
       <div className="header">
-        <h1 className="title">Parquet Query (React + DuckDB)</h1>
+        <h1 className="title">🚀 Parquet Query</h1>
         <div className="muted">
           {dbStatus === 'ready' ? (
-            <span className="pill ok">DuckDB pronto</span>
+            <span className="pill ok">✓ DuckDB pronto</span>
           ) : dbStatus === 'loading' ? (
-            <span className="pill">Carregando DuckDB…</span>
+            <span className="pill">⏳ Carregando DuckDB…</span>
           ) : (
-            <span className="pill">DuckDB ainda não inicializado</span>
+            <span className="pill">○ DuckDB não inicializado</span>
           )}
         </div>
       </div>
 
       <div className="grid">
         <div className="card">
-          <h2>Arquivos</h2>
+          <h2>📁 Arquivos</h2>
           <div className="row">
             <button onClick={onPickFolder} disabled={dbStatus === 'loading'}>
-              {supportsDirectoryPicker ? 'Selecionar pasta' : 'Selecionar pasta (fallback)'}
+              {supportsDirectoryPicker ? '📂 Selecionar pasta' : '📂 Selecionar pasta (fallback)'}
             </button>
             <input
               value={parquetTableName}
@@ -206,7 +206,7 @@ export default function App() {
               disabled={dbStatus !== 'ready' || files.length === 0}
               title="Cria/atualiza uma VIEW com todos os arquivos .parquet importados"
             >
-              Criar tabela
+              ✨ Criar tabela
             </button>
             <button
               className="secondary"
@@ -220,7 +220,7 @@ export default function App() {
               }}
               disabled={dbStatus === 'loading'}
             >
-              Limpar
+              🗑️ Limpar
             </button>
             {folderName ? <span className="pill">{folderName}</span> : null}
             {files.length ? <span className="pill">{files.length} arquivos</span> : null}
@@ -237,14 +237,16 @@ export default function App() {
             style={{ display: 'none' }}
           />
 
-          <div className="muted" style={{ marginTop: 10 }}>
-            Suporta: parquet, csv, json, ndjson. Após importar, consulte com{' '}
-            <code>'caminho/arquivo.ext'</code>.
+          <div className="muted" style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '10px', border: '1px solid rgba(148, 163, 184, 0.2)' }}>
+            <strong>💡 Dica:</strong> Suporta parquet, csv, json, ndjson. Após importar, consulte com{' '}
+            <code style={{ background: 'rgba(99, 102, 241, 0.2)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>'caminho/arquivo.ext'</code>.
           </div>
 
           <div className="filelist">
             {files.length === 0 ? (
-              <div className="muted">Nenhum arquivo importado ainda.</div>
+              <div className="muted" style={{ textAlign: 'center', padding: '24px', opacity: 0.6 }}>
+                📄 Nenhum arquivo importado ainda.
+              </div>
             ) : (
               files.map((f) => (
                 <div className="file" key={f.path}>
@@ -259,11 +261,11 @@ export default function App() {
         </div>
 
         <div className="card">
-          <h2>SQL</h2>
+          <h2>💻 SQL</h2>
           <textarea value={sql} onChange={(e) => setSql(e.target.value)} />
           <div className="row" style={{ marginTop: 10 }}>
             <button onClick={runQuery} disabled={running}>
-              {running ? 'Executando…' : 'Executar'}
+              {running ? '⏳ Executando…' : '▶️ Executar'}
             </button>
             {resultInfo ? <span className="pill ok">{resultInfo}</span> : null}
           </div>
@@ -296,8 +298,8 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
-              <div className="muted" style={{ marginTop: 8 }}>
-                Mostrando até 200 linhas.
+              <div className="muted" style={{ marginTop: 12, textAlign: 'center', fontSize: '12px' }}>
+                📊 Mostrando até 200 linhas
               </div>
             </div>
           ) : null}
