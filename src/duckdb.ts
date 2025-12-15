@@ -3,11 +3,8 @@ import type { Table } from 'apache-arrow';
 
 import duckdbWasmMvp from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
 import duckdbWasmEh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
-import duckdbWasmCoi from '@duckdb/duckdb-wasm/dist/duckdb-coi.wasm?url';
 import duckdbWorkerMvp from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
 import duckdbWorkerEh from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
-import duckdbWorkerCoi from '@duckdb/duckdb-wasm/dist/duckdb-browser-coi.worker.js?url';
-import duckdbPthreadWorkerCoi from '@duckdb/duckdb-wasm/dist/duckdb-browser-coi.pthread.worker.js?url';
 
 type DuckDBState = {
   db: duckdb.AsyncDuckDB;
@@ -27,11 +24,6 @@ export async function getDuckDB(): Promise<DuckDBState> {
       eh: {
         mainModule: duckdbWasmEh,
         mainWorker: duckdbWorkerEh,
-      },
-      coi: {
-        mainModule: duckdbWasmCoi,
-        mainWorker: duckdbWorkerCoi,
-        pthreadWorker: duckdbPthreadWorkerCoi,
       },
     };
     const bundle = await duckdb.selectBundle(bundles);
