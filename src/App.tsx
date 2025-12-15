@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent, useEffect } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
+import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { sql as sqlLanguage } from '@codemirror/lang-sql';
 import { EditorView, keymap } from '@codemirror/view';
 import { defaultKeymap } from '@codemirror/commands';
@@ -61,6 +61,93 @@ function parquetPaths(imported: ImportedFile[]) {
 function tableExampleSQL(tableName: string) {
   const ident = sqlIdentifier(tableName);
   return `-- Exemplo rápido\nSELECT * FROM ${ident} LIMIT 50;`;
+}
+
+function statementAtPosition(sql: string, position: number) {
+  type Segment = { start: number; end: number };
+  const segments: Segment[] = [];
+
+  let start = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i]!;
+    const next = i + 1 < sql.length ? sql[i + 1]! : '';
+
+    if (inLineComment) {
+      if (ch === '\n') inLineComment = false;
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (inSingle) {
+      if (ch === "'" && next === "'") {
+        i++;
+        continue;
+      }
+      if (ch === "'") inSingle = false;
+      continue;
+    }
+
+    if (inDouble) {
+      if (ch === '"' && next === '"') {
+        i++;
+        continue;
+      }
+      if (ch === '"') inDouble = false;
+      continue;
+    }
+
+    if (ch === '-' && next === '-') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      continue;
+    }
+    if (ch === ';') {
+      segments.push({ start, end: i });
+      start = i + 1;
+    }
+  }
+  segments.push({ start, end: sql.length });
+
+  const clampedPos = Math.max(0, Math.min(position, sql.length));
+  let idx = segments.findIndex((s) => clampedPos >= s.start && clampedPos <= s.end);
+  if (idx === -1) idx = segments.length - 1;
+
+  const pick = (i: number) => sql.slice(segments[i]!.start, segments[i]!.end).trim();
+  if (pick(idx)) return pick(idx);
+  for (let j = idx - 1; j >= 0; j--) {
+    const v = pick(j);
+    if (v) return v;
+  }
+  for (let j = idx + 1; j < segments.length; j++) {
+    const v = pick(j);
+    if (v) return v;
+  }
+  return '';
 }
 
 const TEMPLATE_QUERIES = {
@@ -186,6 +273,7 @@ export default function App() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<'scripts' | 'bookmarks' | 'templates'>('scripts');
 
+  const codeMirrorRef = useRef<ReactCodeMirrorRef | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeTab = useMemo(() => tabs.find((t) => t.id === activeTabId) || tabs[0], [tabs, activeTabId]);
@@ -199,6 +287,17 @@ export default function App() {
     () => typeof (window as any).showDirectoryPicker === 'function',
     [],
   );
+
+  function getSQLAtCursorOrSelection() {
+    const view = codeMirrorRef.current?.view;
+    if (!view) return currentSQL;
+    const sel = view.state.selection.main;
+    const selected = sel.from !== sel.to ? view.state.sliceDoc(sel.from, sel.to).trim() : '';
+    if (selected) return selected;
+    const doc = view.state.doc.toString();
+    const stmt = statementAtPosition(doc, sel.head).trim();
+    return stmt || doc.trim();
+  }
 
   async function ensureDbReady() {
     if (dbStatus === 'ready' || dbStatus === 'loading') return;
@@ -320,7 +419,7 @@ export default function App() {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isDirty: false } : t)));
   }
 
-  async function runQuery() {
+  async function runQuery(sqlToRun?: string) {
     setError('');
     setRunning(true);
     setResultInfo('');
@@ -329,7 +428,8 @@ export default function App() {
     setRowSearch('');
     try {
       await ensureDbReady();
-      const result = await query(currentSQL);
+      const statement = (sqlToRun ?? currentSQL).trim();
+      const result = await query(statement);
       const rows = tableToRows(result, 200);
       setTable(rows);
       setResultInfo(
@@ -404,7 +504,8 @@ export default function App() {
     setExporting(true);
     try {
       await ensureDbReady();
-      const batches = await send(currentSQL);
+      const statement = getSQLAtCursorOrSelection();
+      const batches = await send(statement);
       const { parts, rows } = await recordBatchesToCSVParts(batches);
       const blob = new Blob(parts, { type: 'text/csv;charset=utf-8' });
       const fileName = `query-${new Date().toISOString().replaceAll(':', '-')}.csv`;
@@ -447,7 +548,7 @@ export default function App() {
         key: 'Mod-Enter',
         run: () => {
           if (!running && dbStatus === 'ready') {
-            runQueryRef.current();
+            runQueryRef.current(getSQLAtCursorOrSelection());
           }
           return true;
         },
@@ -671,6 +772,7 @@ export default function App() {
 
             <div className="sql-editor-wrapper">
               <CodeMirror
+                ref={codeMirrorRef}
                 theme="dark"
                 height="55vh"
                 minHeight="260px"
@@ -775,14 +877,14 @@ export default function App() {
                   allowMultipleSelections: false,
                 }}
               />
-            </div>
-            <div className="row" style={{ marginTop: 10 }}>
-              <button onClick={runQuery} disabled={running || exporting}>
-                {running ? '⏳ Executando…' : '▶️ Executar'}
-              </button>
-              <button className="secondary" onClick={exportCSV} disabled={running || exporting}>
-                {exporting ? '⏳ Exportando…' : '⬇️ Exportar CSV'}
-              </button>
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button onClick={() => runQuery(getSQLAtCursorOrSelection())} disabled={running || exporting}>
+              {running ? '⏳ Executando…' : '▶️ Executar'}
+            </button>
+            <button className="secondary" onClick={exportCSV} disabled={running || exporting}>
+              {exporting ? '⏳ Exportando…' : '⬇️ Exportar CSV'}
+            </button>
               <input
                 value={rowSearch}
                 onChange={(e) => setRowSearch(e.target.value)}
