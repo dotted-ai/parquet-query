@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { sql as sqlLanguage } from '@codemirror/lang-sql';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
+import { defaultKeymap } from '@codemirror/commands';
 import { tableToRows } from './arrow';
 import {
   collectFilesFromDirectoryHandle,
@@ -181,6 +182,23 @@ export default function App() {
     }
   }
 
+  const runQueryRef = useRef(runQuery);
+  runQueryRef.current = runQuery;
+
+  const executeQueryKeymap = useMemo(() => {
+    return keymap.of([
+      {
+        key: 'Mod-Enter',
+        run: () => {
+          if (!running && dbStatus === 'ready') {
+            runQueryRef.current();
+          }
+          return true;
+        },
+      },
+    ]);
+  }, [running, dbStatus]);
+
   return (
     <div className="container">
       <div className="header">
@@ -285,6 +303,7 @@ export default function App() {
               onChange={(value) => setSql(value)}
               extensions={[
                 sqlLanguage(),
+                executeQueryKeymap,
                 EditorView.theme({
                   '&': {
                     backgroundColor: '#1e1e1e',
