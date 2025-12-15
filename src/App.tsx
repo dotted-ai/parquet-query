@@ -48,6 +48,11 @@ function parquetPaths(imported: ImportedFile[]) {
     .map((f) => f.path);
 }
 
+function tableExampleSQL(tableName: string) {
+  const ident = sqlIdentifier(tableName);
+  return `-- Exemplo rápido\nSELECT * FROM ${ident} LIMIT 50;`;
+}
+
 export default function App() {
   const [dbStatus, setDbStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
   const [files, setFiles] = useState<ImportedFile[]>([]);
@@ -483,6 +488,31 @@ export default function App() {
             </button>
             <button className="secondary" onClick={exportCSV} disabled={running || exporting}>
               {exporting ? '⏳ Exportando…' : '⬇️ Exportar CSV'}
+            </button>
+            <button
+              className="secondary"
+              onClick={() => {
+                setSql(DEFAULT_SQL);
+                setError('');
+                setResultInfo('');
+                setTable(undefined);
+                setSort(null);
+              }}
+              disabled={running || exporting}
+              title="Restaura o SQL padrão"
+            >
+              ↩️ Reset SQL
+            </button>
+            <button
+              className="secondary"
+              onClick={() => {
+                setSql(tableExampleSQL(parquetTableName));
+                setError('');
+              }}
+              disabled={running || exporting || !parquetTableName.trim()}
+              title="Coloca um SELECT pronto para a tabela criada"
+            >
+              🧪 Exemplo tabela
             </button>
             {resultInfo ? <span className="pill ok">{resultInfo}</span> : null}
           </div>
