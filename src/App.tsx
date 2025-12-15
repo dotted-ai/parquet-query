@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent, useEffect } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { sql as sqlLanguage } from '@codemirror/lang-sql';
 import { EditorView, keymap } from '@codemirror/view';
@@ -19,6 +19,16 @@ const DEFAULT_SQL = `-- Dica: você pode consultar arquivos diretamente pelo cam
 --   SELECT * FROM minha_tabela LIMIT 50;
 
 SELECT 42 AS ok;`;
+
+interface QueryTab {
+  id: string;
+  name: string;
+  sql: string;
+  isDirty: boolean;
+  category: 'scripts' | 'bookmarks' | 'templates';
+}
+
+const STORAGE_KEY = 'parquet-query-tabs';
 
 function bytes(size: number) {
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -53,12 +63,117 @@ function tableExampleSQL(tableName: string) {
   return `-- Exemplo rápido\nSELECT * FROM ${ident} LIMIT 50;`;
 }
 
+const TEMPLATE_QUERIES = {
+  'CUR - Resumo por Conta': `-- Resumo de custos por conta
+SELECT
+  line_item_usage_account_id AS account_id,
+  COUNT(*) AS total_linhas,
+  round(SUM(line_item_unblended_cost), 2) AS total_custo,
+  MIN(bill_billing_period_start_date) AS periodo_inicio,
+  MAX(bill_billing_period_start_date) AS periodo_fim
+FROM dotted_org_cur
+WHERE bill_billing_period_start_date >= CURRENT_DATE - INTERVAL '30' DAY
+GROUP BY line_item_usage_account_id
+ORDER BY total_custo DESC;`,
+
+  'CUR - Resumo por Serviço': `-- Resumo de custos por serviço
+SELECT
+  COALESCE(product_servicename, product_product_name, line_item_line_item_type) AS service_name,
+  COUNT(*) AS total_linhas,
+  round(SUM(line_item_unblended_cost), 2) AS total_custo
+FROM dotted_org_cur
+WHERE bill_billing_period_start_date >= CURRENT_DATE - INTERVAL '30' DAY
+  AND line_item_line_item_type <> 'Tax'
+GROUP BY service_name
+ORDER BY total_custo DESC
+LIMIT 50;`,
+
+  'CUR - Resumo por Mês': `-- Resumo de custos por mês
+SELECT
+  date_trunc('month', bill_billing_period_start_date) AS mes,
+  COUNT(*) AS total_linhas,
+  round(SUM(line_item_unblended_cost), 2) AS total_custo
+FROM dotted_org_cur
+WHERE bill_billing_period_start_date >= CURRENT_DATE - INTERVAL '90' DAY
+  AND line_item_line_item_type <> 'Tax'
+GROUP BY mes
+ORDER BY mes DESC;`,
+
+  'CUR - Detalhes por Conta': `-- Detalhes de custos para uma conta específica
+SELECT
+  line_item_usage_account_id AS account_id,
+  COALESCE(product_servicename, product_product_name, line_item_line_item_type) AS service_name,
+  date_trunc('month', bill_billing_period_start_date) AS mes,
+  round(SUM(line_item_unblended_cost), 2) AS custo
+FROM dotted_org_cur
+WHERE line_item_usage_account_id = '331957531828'  -- Ajuste o account_id
+  AND bill_billing_period_start_date BETWEEN TIMESTAMP '2025-12-01' AND TIMESTAMP '2025-12-31'
+  AND line_item_line_item_type <> 'Tax'
+GROUP BY account_id, service_name, mes
+ORDER BY mes DESC, custo DESC;`,
+
+  'CUR - Savings Plans': `-- Análise de Savings Plans
+SELECT
+  line_item_usage_account_id AS account_id,
+  date_trunc('month', bill_billing_period_start_date) AS mes,
+  round(SUM(savings_plan_total_commitment_to_date), 2) AS sp_commitment,
+  round(SUM(savings_plan_savings_plan_effective_cost), 2) AS sp_effective_cost,
+  round(SUM(CASE WHEN line_item_line_item_type = 'SavingsPlanCoveredUsage' THEN line_item_unblended_cost ELSE 0 END), 2) AS sp_usage_save
+FROM dotted_org_cur
+WHERE bill_billing_period_start_date >= CURRENT_DATE - INTERVAL '90' DAY
+  AND savings_plan_savings_plan_a_r_n IS NOT NULL
+GROUP BY account_id, mes
+ORDER BY mes DESC, account_id;`,
+
+  'CUR - Reserved Instances': `-- Análise de Reserved Instances
+SELECT
+  line_item_usage_account_id AS account_id,
+  date_trunc('month', bill_billing_period_start_date) AS mes,
+  round(SUM(CASE WHEN line_item_line_item_type = 'RIFee' THEN line_item_unblended_cost ELSE 0 END), 2) AS ri_cost,
+  round(SUM(CASE WHEN line_item_line_item_type = 'DiscountedUsage' THEN reservation_effective_cost ELSE 0 END), 2) AS ri_usage_cost,
+  round(SUM(reservation_unused_recurring_fee), 2) AS unused_ri
+FROM dotted_org_cur
+WHERE bill_billing_period_start_date >= CURRENT_DATE - INTERVAL '90' DAY
+  AND reservation_reservation_a_r_n IS NOT NULL
+GROUP BY account_id, mes
+ORDER BY mes DESC, account_id;`,
+};
+
+function loadTabsFromStorage(): QueryTab[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar tabs do localStorage', e);
+  }
+  return [
+    {
+      id: '1',
+      name: 'Script-1',
+      sql: DEFAULT_SQL,
+      isDirty: false,
+      category: 'scripts',
+    },
+  ];
+}
+
+function saveTabsToStorage(tabs: QueryTab[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tabs));
+  } catch (e) {
+    console.warn('Erro ao salvar tabs no localStorage', e);
+  }
+}
+
 export default function App() {
   const [dbStatus, setDbStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
   const [files, setFiles] = useState<ImportedFile[]>([]);
   const [folderName, setFolderName] = useState<string>('');
   const [parquetTableName, setParquetTableName] = useState<string>('');
-  const [sql, setSql] = useState(DEFAULT_SQL);
+  const [tabs, setTabs] = useState<QueryTab[]>(loadTabsFromStorage);
+  const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id || '1');
   const [running, setRunning] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string>('');
@@ -68,8 +183,17 @@ export default function App() {
   const [sort, setSort] = useState<{ col: number; dir: 'asc' | 'desc' } | null>(null);
   const [rowSearch, setRowSearch] = useState<string>('');
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<'scripts' | 'bookmarks' | 'templates'>('scripts');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const activeTab = useMemo(() => tabs.find((t) => t.id === activeTabId) || tabs[0], [tabs, activeTabId]);
+  const currentSQL = activeTab?.sql || DEFAULT_SQL;
+
+  useEffect(() => {
+    saveTabsToStorage(tabs);
+  }, [tabs]);
 
   const supportsDirectoryPicker = useMemo(
     () => typeof (window as any).showDirectoryPicker === 'function',
@@ -159,6 +283,43 @@ export default function App() {
     }
   }
 
+  function createNewTab(category: 'scripts' | 'bookmarks' | 'templates' = 'scripts') {
+    const newId = String(Date.now());
+    const newTab: QueryTab = {
+      id: newId,
+      name: `Script-${tabs.filter((t) => t.category === category).length + 1}`,
+      sql: DEFAULT_SQL,
+      isDirty: false,
+      category,
+    };
+    setTabs([...tabs, newTab]);
+    setActiveTabId(newId);
+    setSelectedCategory(category);
+  }
+
+  function closeTab(tabId: string) {
+    if (tabs.length === 1) return;
+    const newTabs = tabs.filter((t) => t.id !== tabId);
+    setTabs(newTabs);
+    if (activeTabId === tabId) {
+      setActiveTabId(newTabs[0]?.id || '1');
+    }
+  }
+
+  function updateTabSQL(tabId: string, sql: string) {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, sql, isDirty: true } : t)),
+    );
+  }
+
+  function updateTabName(tabId: string, name: string) {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, name: name.trim() || t.name } : t)));
+  }
+
+  function markTabClean(tabId: string) {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isDirty: false } : t)));
+  }
+
   async function runQuery() {
     setError('');
     setRunning(true);
@@ -168,12 +329,13 @@ export default function App() {
     setRowSearch('');
     try {
       await ensureDbReady();
-      const result = await query(sql);
+      const result = await query(currentSQL);
       const rows = tableToRows(result, 200);
       setTable(rows);
       setResultInfo(
         `Linhas: ${result.numRows.toLocaleString()} (mostrando ${rows.rows.length}) · Colunas: ${rows.columns.length}`,
       );
+      markTabClean(activeTabId);
     } catch (e: any) {
       setError(e?.message || String(e));
     } finally {
@@ -242,7 +404,7 @@ export default function App() {
     setExporting(true);
     try {
       await ensureDbReady();
-      const batches = await send(sql);
+      const batches = await send(currentSQL);
       const { parts, rows } = await recordBatchesToCSVParts(batches);
       const blob = new Blob(parts, { type: 'text/csv;charset=utf-8' });
       const fileName = `query-${new Date().toISOString().replaceAll(':', '-')}.csv`;
@@ -293,6 +455,8 @@ export default function App() {
     ]);
   }, [running, dbStatus]);
 
+  const visibleTabs = useMemo(() => tabs.filter((t) => t.category === selectedCategory), [tabs, selectedCategory]);
+
   return (
     <div className="container">
       <div className="header">
@@ -308,47 +472,160 @@ export default function App() {
         </div>
       </div>
 
-      <div className="grid">
-        <div className="card">
-          <h2>📁 Arquivos</h2>
-          <div className="row">
-            <button onClick={onPickFolder} disabled={dbStatus === 'loading' || loadingFiles}>
-              {supportsDirectoryPicker ? '📂 Selecionar pasta' : '📂 Selecionar pasta (fallback)'}
-            </button>
-            <input
-              type="text"
-              className="table-name-input"
-              value={parquetTableName}
-              onChange={(e) => setParquetTableName(e.target.value)}
-              placeholder="Nome da tabela (opcional)"
-            />
+      <div className="main-layout">
+        <div className={`sidebar ${sidebarExpanded ? 'expanded' : 'collapsed'}`}>
+          <div className="sidebar-header">
             <button
-              className="secondary"
-              onClick={onCreateTable}
-              disabled={dbStatus !== 'ready' || files.length === 0}
-              title="Cria/atualiza uma VIEW com todos os arquivos .parquet importados"
+              className="sidebar-toggle"
+              onClick={() => setSidebarExpanded(!sidebarExpanded)}
+              title={sidebarExpanded ? 'Recolher sidebar' : 'Expandir sidebar'}
             >
-              ✨ Criar tabela
+              {sidebarExpanded ? '◀' : '▶'}
             </button>
-            <button
-              className="secondary"
-              onClick={() => {
-                setFiles([]);
-                setFolderName('');
-                setResultInfo('');
-                setImportInfo('');
-                setTable(undefined);
-                setError('');
-              }}
-              disabled={dbStatus === 'loading' || loadingFiles}
-            >
-              🗑️ Limpar
-            </button>
-            {folderName ? <span className="pill">{folderName}</span> : null}
-            {files.length ? <span className="pill">{files.length} arquivos</span> : null}
-            {importInfo ? <span className="pill ok">{importInfo}</span> : null}
+            {sidebarExpanded && <h3>Navegação</h3>}
           </div>
 
+          {sidebarExpanded && (
+            <>
+              <div className="sidebar-section">
+                <div className="sidebar-category">
+                  <button
+                    className={`category-btn ${selectedCategory === 'scripts' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('scripts')}
+                  >
+                    📝 Scripts
+                  </button>
+                  <button
+                    className={`category-btn ${selectedCategory === 'bookmarks' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('bookmarks')}
+                  >
+                    🔖 Bookmarks
+                  </button>
+                  <button
+                    className={`category-btn ${selectedCategory === 'templates' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('templates')}
+                  >
+                    📋 Templates
+                  </button>
+                </div>
+              </div>
+
+              <div className="sidebar-section">
+                <div className="sidebar-files">
+                  <div className="sidebar-files-header">
+                    <span>Arquivos</span>
+                    <button
+                      className="icon-btn"
+                      onClick={() => createNewTab(selectedCategory)}
+                      title="Novo script"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="file-list">
+                    {visibleTabs.map((tab) => (
+                      <div
+                        key={tab.id}
+                        className={`file-item ${activeTabId === tab.id ? 'active' : ''}`}
+                        onClick={() => setActiveTabId(tab.id)}
+                        title={tab.isDirty ? `${tab.name} (modificado)` : tab.name}
+                      >
+                        <span className="file-name">
+                          {tab.isDirty && '*'}
+                          {tab.name}
+                        </span>
+                        <button
+                          className="file-close"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            closeTab(tab.id);
+                          }}
+                          title="Fechar"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedCategory === 'templates' && (
+                    <div className="templates-list">
+                      {Object.entries(TEMPLATE_QUERIES).map(([name, sql]) => (
+                        <button
+                          key={name}
+                          className="template-btn"
+                          onClick={() => {
+                            const newId = String(Date.now());
+                            const newTab: QueryTab = {
+                              id: newId,
+                              name,
+                              sql,
+                              isDirty: false,
+                              category: 'scripts',
+                            };
+                            setTabs([...tabs, newTab]);
+                            setActiveTabId(newId);
+                            setSelectedCategory('scripts');
+                          }}
+                          title={`Criar script a partir do template: ${name}`}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="sidebar-section">
+                <h4>📁 Arquivos Importados</h4>
+                <div className="row">
+                  <button onClick={onPickFolder} disabled={dbStatus === 'loading' || loadingFiles} className="small-btn">
+                    {supportsDirectoryPicker ? '📂 Selecionar pasta' : '📂 Selecionar pasta (fallback)'}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  className="table-name-input small"
+                  value={parquetTableName}
+                  onChange={(e) => setParquetTableName(e.target.value)}
+                  placeholder="Nome da tabela (opcional)"
+                />
+                <button
+                  className="secondary small-btn"
+                  onClick={onCreateTable}
+                  disabled={dbStatus !== 'ready' || files.length === 0}
+                  title="Cria/atualiza uma VIEW com todos os arquivos .parquet importados"
+                >
+                  ✨ Criar tabela
+                </button>
+                {folderName ? <span className="pill small">{folderName}</span> : null}
+                {files.length ? <span className="pill small">{files.length} arquivos</span> : null}
+                {importInfo ? <span className="pill ok small">{importInfo}</span> : null}
+
+                <div className="filelist-sidebar">
+                  {loadingFiles ? (
+                    <div className="loader-container">
+                      <div className="loader"></div>
+                    </div>
+                  ) : files.length === 0 ? (
+                    <div className="muted" style={{ textAlign: 'center', padding: '12px', fontSize: '12px' }}>
+                      📄 Nenhum arquivo
+                    </div>
+                  ) : (
+                    files.slice(0, 10).map((f) => (
+                      <div className="file-sidebar" key={f.path} title={f.path}>
+                        <div>{f.path}</div>
+                        <div className="muted">{bytes(f.size)}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="main-content">
           <input
             ref={fileInputRef}
             type="file"
@@ -359,234 +636,244 @@ export default function App() {
             style={{ display: 'none' }}
           />
 
-          <div className="muted" style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '10px', border: '1px solid rgba(148, 163, 184, 0.2)' }}>
-            <strong>💡 Dica:</strong> Suporta parquet, csv, json, ndjson. Após importar, consulte com{' '}
-            <code style={{ background: 'rgba(99, 102, 241, 0.2)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>'caminho/arquivo.ext'</code>.
-          </div>
-
-          <div className="filelist">
-            {loadingFiles ? (
-              <div className="loader-container">
-                <div className="loader"></div>
-                <div className="muted" style={{ textAlign: 'center', marginTop: '16px', opacity: 0.8 }}>
-                  ⏳ Carregando arquivos...
-                </div>
+          <div className="card">
+            <div className="tabs-container">
+              <div className="tabs">
+                {tabs
+                  .filter((t) => t.category === selectedCategory)
+                  .map((tab) => (
+                    <div
+                      key={tab.id}
+                      className={`tab ${activeTabId === tab.id ? 'active' : ''}`}
+                      onClick={() => setActiveTabId(tab.id)}
+                    >
+                      <span className="tab-name">
+                        {tab.isDirty && '*'}
+                        {tab.name}
+                      </span>
+                      <button
+                        className="tab-close"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeTab(tab.id);
+                        }}
+                        title="Fechar"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                <button className="tab-new" onClick={() => createNewTab(selectedCategory)} title="Novo script">
+                  +
+                </button>
               </div>
-            ) : files.length === 0 ? (
-              <div className="muted" style={{ textAlign: 'center', padding: '24px', opacity: 0.6 }}>
-                📄 Nenhum arquivo importado ainda.
-              </div>
-            ) : (
-              files.map((f) => (
-                <div className="file" key={f.path}>
-                  <div title={f.path} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {f.path}
-                  </div>
-                  <div className="muted">{bytes(f.size)}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="card">
-          <h2>💻 SQL</h2>
-          <div className="sql-editor-wrapper">
-            <CodeMirror
-              value={sql}
-              onChange={(value) => setSql(value)}
-              extensions={[
-                sqlLanguage(),
-                executeQueryKeymap,
-                EditorView.theme({
-                  '&': {
-                    backgroundColor: '#1e1e1e',
-                    color: '#f1f5f9',
-                    fontSize: '14px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148, 163, 184, 0.2)',
-                    transition: 'all 0.2s ease',
-                  },
-                  '&.cm-focused': {
-                    outline: 'none',
-                    border: '1px solid #6366f1',
-                    boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.1), 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3)',
-                    backgroundColor: '#1e1e1e',
-                  },
-                  '.cm-content': {
-                    padding: '16px',
-                    minHeight: '200px',
-                    fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                    lineHeight: '1.6',
-                    color: '#f1f5f9 !important',
-                  },
-                  '.cm-scroller': {
-                    fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                  },
-                  '.cm-editor': {
-                    color: '#f1f5f9',
-                  },
-                  '.cm-keyword': {
-                    color: '#818cf8 !important',
-                    fontWeight: '600',
-                    opacity: '1 !important',
-                  },
-                  '.cm-string': {
-                    color: '#34d399 !important',
-                    opacity: '1 !important',
-                  },
-                  '.cm-number': {
-                    color: '#fbbf24 !important',
-                    opacity: '1 !important',
-                  },
-                  '.cm-comment': {
-                    color: '#94a3b8',
-                    fontStyle: 'italic',
-                    opacity: '1 !important',
-                  },
-                  '.cm-operator': {
-                    color: '#c084fc !important',
-                    opacity: '1 !important',
-                  },
-                  '.cm-builtin': {
-                    color: '#60a5fa !important',
-                    opacity: '1 !important',
-                  },
-                  '.cm-variable': {
-                    color: '#f1f5f9 !important',
-                    opacity: '1 !important',
-                  },
-                  '.cm-attribute': {
-                    color: '#a78bfa !important',
-                    opacity: '1 !important',
-                  },
-                  '.cm-line': {
-                    color: '#f1f5f9 !important',
-                    opacity: '1 !important',
-                  },
-                  '.cm-text': {
-                    color: '#f1f5f9 !important',
-                    opacity: '1 !important',
-                  },
-                  '.cm-cursor': {
-                    borderLeftColor: '#6366f1',
-                  },
-                  '.cm-selectionBackground': {
-                    backgroundColor: 'rgba(99, 102, 241, 0.2)',
-                  },
-                  '&.cm-focused .cm-selectionBackground': {
-                    backgroundColor: 'rgba(99, 102, 241, 0.3)',
-                  },
-                  '.cm-lineNumbers': {
-                    color: '#94a3b8',
-                    fontSize: '12px',
-                  },
-                  '.cm-gutterElement': {
-                    padding: '0 8px 0 16px',
-                  },
-                }),
-              ]}
-              basicSetup={{
-                lineNumbers: true,
-                foldGutter: true,
-                dropCursor: false,
-                allowMultipleSelections: false,
-              }}
-            />
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <button onClick={runQuery} disabled={running || exporting}>
-              {running ? '⏳ Executando…' : '▶️ Executar'}
-            </button>
-            <button className="secondary" onClick={exportCSV} disabled={running || exporting}>
-              {exporting ? '⏳ Exportando…' : '⬇️ Exportar CSV'}
-            </button>
-            <input
-              value={rowSearch}
-              onChange={(e) => setRowSearch(e.target.value)}
-              placeholder="Buscar nas linhas…"
-              disabled={!table || running || exporting}
-              style={{ minWidth: 220 }}
-              title="Filtra apenas as linhas exibidas (até 200)"
-            />
-            <button
-              className="secondary"
-              onClick={() => {
-                setSql(DEFAULT_SQL);
-                setError('');
-                setResultInfo('');
-                setTable(undefined);
-                setSort(null);
-                setRowSearch('');
-              }}
-              disabled={running || exporting}
-              title="Restaura o SQL padrão"
-            >
-              ↩️ Reset SQL
-            </button>
-            <button
-              className="secondary"
-              onClick={() => {
-                setSql(tableExampleSQL(parquetTableName));
-                setError('');
-              }}
-              disabled={running || exporting || !parquetTableName.trim()}
-              title="Coloca um SELECT pronto para a tabela criada"
-            >
-              🧪 Exemplo tabela
-            </button>
-            {resultInfo ? <span className="pill ok">{resultInfo}</span> : null}
-            {table && rowSearch.trim() ? (
-              <span className="pill">
-                {sortedTable?.rows.length ?? 0}/{table.rows.length} linhas
-              </span>
-            ) : null}
-          </div>
-
-          {error ? (
-            <div className="error" style={{ marginTop: 12 }}>
-              {error}
             </div>
-          ) : null}
 
-          {table ? (
-            <div style={{ marginTop: 12 }}>
-              <div className="tableWrap">
-                <table>
-                  <thead>
-                    <tr>
-                      {table.columns.map((c, idx) => (
-                        <th
-                          key={c}
-                          onClick={() => toggleSort(idx)}
-                          style={{ cursor: 'pointer', userSelect: 'none' }}
-                          title="Clique para ordenar"
-                          aria-sort={
-                            sort?.col === idx ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
-                          }
-                        >
-                          {c}
-                          {sort?.col === idx ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : null}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(sortedTable?.rows ?? []).map((r, idx) => (
-                      <tr key={idx}>
-                        {r.map((cell, cidx) => (
-                          <td key={cidx}>{cell}</td>
+            <div className="sql-editor-wrapper">
+              <CodeMirror
+                value={currentSQL}
+                onChange={(value) => updateTabSQL(activeTabId, value)}
+                extensions={[
+                  sqlLanguage(),
+                  executeQueryKeymap,
+                  EditorView.theme({
+                    '&': {
+                      backgroundColor: '#1e1e1e',
+                      color: '#f1f5f9',
+                      fontSize: '14px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(148, 163, 184, 0.2)',
+                      transition: 'all 0.2s ease',
+                    },
+                    '&.cm-focused': {
+                      outline: 'none',
+                      border: '1px solid #6366f1',
+                      boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.1), 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3)',
+                      backgroundColor: '#1e1e1e',
+                    },
+                    '.cm-content': {
+                      padding: '16px',
+                      minHeight: '200px',
+                      fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                      lineHeight: '1.6',
+                      color: '#f1f5f9 !important',
+                    },
+                    '.cm-scroller': {
+                      fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                    },
+                    '.cm-editor': {
+                      color: '#f1f5f9',
+                    },
+                    '.cm-keyword': {
+                      color: '#818cf8 !important',
+                      fontWeight: '600',
+                      opacity: '1 !important',
+                    },
+                    '.cm-string': {
+                      color: '#34d399 !important',
+                      opacity: '1 !important',
+                    },
+                    '.cm-number': {
+                      color: '#fbbf24 !important',
+                      opacity: '1 !important',
+                    },
+                    '.cm-comment': {
+                      color: '#94a3b8',
+                      fontStyle: 'italic',
+                      opacity: '1 !important',
+                    },
+                    '.cm-operator': {
+                      color: '#c084fc !important',
+                      opacity: '1 !important',
+                    },
+                    '.cm-builtin': {
+                      color: '#60a5fa !important',
+                      opacity: '1 !important',
+                    },
+                    '.cm-variable': {
+                      color: '#f1f5f9 !important',
+                      opacity: '1 !important',
+                    },
+                    '.cm-attribute': {
+                      color: '#a78bfa !important',
+                      opacity: '1 !important',
+                    },
+                    '.cm-line': {
+                      color: '#f1f5f9 !important',
+                      opacity: '1 !important',
+                    },
+                    '.cm-text': {
+                      color: '#f1f5f9 !important',
+                      opacity: '1 !important',
+                    },
+                    '.cm-cursor': {
+                      borderLeftColor: '#6366f1',
+                    },
+                    '.cm-selectionBackground': {
+                      backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                    },
+                    '&.cm-focused .cm-selectionBackground': {
+                      backgroundColor: 'rgba(99, 102, 241, 0.3)',
+                    },
+                    '.cm-lineNumbers': {
+                      color: '#94a3b8',
+                      fontSize: '12px',
+                    },
+                    '.cm-gutterElement': {
+                      padding: '0 8px 0 16px',
+                    },
+                  }),
+                ]}
+                basicSetup={{
+                  lineNumbers: true,
+                  foldGutter: true,
+                  dropCursor: false,
+                  allowMultipleSelections: false,
+                }}
+              />
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button onClick={runQuery} disabled={running || exporting}>
+                {running ? '⏳ Executando…' : '▶️ Executar'}
+              </button>
+              <button className="secondary" onClick={exportCSV} disabled={running || exporting}>
+                {exporting ? '⏳ Exportando…' : '⬇️ Exportar CSV'}
+              </button>
+              <input
+                value={rowSearch}
+                onChange={(e) => setRowSearch(e.target.value)}
+                placeholder="Buscar nas linhas…"
+                disabled={!table || running || exporting}
+                style={{ minWidth: 220 }}
+                title="Filtra apenas as linhas exibidas (até 200)"
+              />
+              <input
+                type="text"
+                value={activeTab?.name || ''}
+                onChange={(e) => updateTabName(activeTabId, e.target.value)}
+                placeholder="Nome do script"
+                style={{ minWidth: 150, fontSize: '13px' }}
+                onBlur={() => markTabClean(activeTabId)}
+              />
+              <button
+                className="secondary"
+                onClick={() => {
+                  updateTabSQL(activeTabId, DEFAULT_SQL);
+                  setError('');
+                  setResultInfo('');
+                  setTable(undefined);
+                  setSort(null);
+                  setRowSearch('');
+                }}
+                disabled={running || exporting}
+                title="Restaura o SQL padrão"
+              >
+                ↩️ Reset SQL
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  updateTabSQL(activeTabId, tableExampleSQL(parquetTableName));
+                  setError('');
+                }}
+                disabled={running || exporting || !parquetTableName.trim()}
+                title="Coloca um SELECT pronto para a tabela criada"
+              >
+                🧪 Exemplo tabela
+              </button>
+              {resultInfo ? <span className="pill ok">{resultInfo}</span> : null}
+              {table && rowSearch.trim() ? (
+                <span className="pill">
+                  {sortedTable?.rows.length ?? 0}/{table.rows.length} linhas
+                </span>
+              ) : null}
+            </div>
+
+            {error ? (
+              <div className="error" style={{ marginTop: 12 }}>
+                {error}
+              </div>
+            ) : null}
+
+            {table ? (
+              <div style={{ marginTop: 12 }}>
+                <div className="tableWrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        {table.columns.map((c, idx) => (
+                          <th
+                            key={c}
+                            onClick={() => toggleSort(idx)}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                            title="Clique para ordenar"
+                            aria-sort={
+                              sort?.col === idx ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
+                            }
+                          >
+                            {c}
+                            {sort?.col === idx ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : null}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {(sortedTable?.rows ?? []).map((r, idx) => (
+                        <tr key={idx}>
+                          {r.map((cell, cidx) => (
+                            <td key={cidx}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="muted" style={{ marginTop: 12, textAlign: 'center', fontSize: '12px' }}>
+                  📊 Mostrando até 200 linhas
+                </div>
               </div>
-              <div className="muted" style={{ marginTop: 12, textAlign: 'center', fontSize: '12px' }}>
-                📊 Mostrando até 200 linhas
-              </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
