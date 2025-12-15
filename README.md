@@ -2,6 +2,8 @@
 
 App React no browser usando DuckDB-WASM para importar uma pasta (parquet/csv/json/ndjson) e executar queries SQL.
 
+![Screenshot da aplicação](assets/screenshot.png)
+
 ## Requisitos
 
 - Node.js 18+
