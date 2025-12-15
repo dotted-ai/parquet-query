@@ -263,6 +263,41 @@ textarea:focus {
   background: rgba(15, 23, 42, 0.8);
 }
 
+.sql-editor-wrapper {
+  width: 100%;
+  margin-bottom: 0;
+  transition: all 0.2s ease;
+}
+
+.sql-editor-wrapper .cm-editor {
+  transition: all 0.2s ease;
+}
+
+.sql-editor-wrapper .cm-editor:hover {
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.sql-editor-wrapper .cm-lineNumbers {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sql-editor-wrapper .cm-lineNumbers .cm-gutterElement {
+  padding: 0 8px 0 16px;
+}
+
+.sql-editor-wrapper .cm-cursor {
+  border-left-color: var(--primary);
+}
+
+.sql-editor-wrapper .cm-selectionBackground {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.sql-editor-wrapper .cm-focused .cm-selectionBackground {
+  background: rgba(99, 102, 241, 0.3);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

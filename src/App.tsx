@@ -1,4 +1,7 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import { sql as sqlLanguage } from '@codemirror/lang-sql';
+import { EditorView } from '@codemirror/view';
 import { tableToRows } from './arrow';
 import {
   collectFilesFromDirectoryHandle,
@@ -263,7 +266,90 @@ export default function App() {
 
         <div className="card">
           <h2>💻 SQL</h2>
-          <textarea value={sql} onChange={(e) => setSql(e.target.value)} />
+          <div className="sql-editor-wrapper">
+            <CodeMirror
+              value={sql}
+              onChange={(value) => setSql(value)}
+              extensions={[
+                sqlLanguage(),
+                EditorView.theme({
+                  '&': {
+                    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                    color: '#f1f5f9',
+                    fontSize: '14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(148, 163, 184, 0.2)',
+                    transition: 'all 0.2s ease',
+                  },
+                  '&.cm-focused': {
+                    outline: 'none',
+                    border: '1px solid #6366f1',
+                    boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.1), 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3)',
+                  },
+                  '.cm-content': {
+                    padding: '16px',
+                    minHeight: '200px',
+                    fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                    lineHeight: '1.6',
+                  },
+                  '.cm-scroller': {
+                    fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                  },
+                  '.cm-keyword': {
+                    color: '#818cf8',
+                    fontWeight: '600',
+                  },
+                  '.cm-string': {
+                    color: '#34d399',
+                  },
+                  '.cm-number': {
+                    color: '#fbbf24',
+                  },
+                  '.cm-comment': {
+                    color: '#94a3b8',
+                    fontStyle: 'italic',
+                  },
+                  '.cm-operator': {
+                    color: '#c084fc',
+                  },
+                  '.cm-builtin': {
+                    color: '#60a5fa',
+                  },
+                  '.cm-variable': {
+                    color: '#f1f5f9',
+                  },
+                  '.cm-attribute': {
+                    color: '#a78bfa',
+                  },
+                  '.cm-line': {
+                    color: '#f1f5f9',
+                  },
+                  '.cm-cursor': {
+                    borderLeftColor: '#6366f1',
+                  },
+                  '.cm-selectionBackground': {
+                    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                  },
+                  '&.cm-focused .cm-selectionBackground': {
+                    backgroundColor: 'rgba(99, 102, 241, 0.3)',
+                  },
+                  '.cm-lineNumbers': {
+                    color: '#94a3b8',
+                    fontSize: '12px',
+                  },
+                  '.cm-gutterElement': {
+                    padding: '0 8px 0 16px',
+                  },
+                }),
+              ]}
+              basicSetup={{
+                lineNumbers: true,
+                foldGutter: true,
+                dropCursor: false,
+                allowMultipleSelections: false,
+              }}
+            />
+          </div>
           <div className="row" style={{ marginTop: 10 }}>
             <button onClick={runQuery} disabled={running}>
               {running ? '⏳ Executando…' : '▶️ Executar'}
