@@ -60,6 +60,7 @@ export default function App() {
   const [resultInfo, setResultInfo] = useState<string>('');
   const [importInfo, setImportInfo] = useState<string>('');
   const [table, setTable] = useState<{ columns: string[]; rows: string[][] }>();
+  const [sort, setSort] = useState<{ col: number; dir: 'asc' | 'desc' } | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -157,6 +158,7 @@ export default function App() {
     setRunning(true);
     setResultInfo('');
     setTable(undefined);
+    setSort(null);
     try {
       await ensureDbReady();
       const result = await query(sql);
@@ -171,6 +173,52 @@ export default function App() {
       setRunning(false);
     }
   }
+
+  function toggleSort(col: number) {
+    setSort((prev) => {
+      if (!prev || prev.col !== col) return { col, dir: 'asc' };
+      if (prev.dir === 'asc') return { col, dir: 'desc' };
+      return null;
+    });
+  }
+
+  function compareCells(aRaw: string, bRaw: string) {
+    const a = aRaw?.trim?.() ?? '';
+    const b = bRaw?.trim?.() ?? '';
+    const aEmpty = a === '';
+    const bEmpty = b === '';
+    if (aEmpty && bEmpty) return 0;
+    if (aEmpty) return 1;
+    if (bEmpty) return -1;
+
+    if (/^-?\d+(\.\d+)?$/.test(a) && /^-?\d+(\.\d+)?$/.test(b)) {
+      const an = Number(a);
+      const bn = Number(b);
+      if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+    }
+
+    const aHasDateHint = a.includes('-') || a.includes('T') || a.includes(':');
+    const bHasDateHint = b.includes('-') || b.includes('T') || b.includes(':');
+    if (aHasDateHint && bHasDateHint) {
+      const at = Date.parse(a);
+      const bt = Date.parse(b);
+      if (!Number.isNaN(at) && !Number.isNaN(bt)) return at - bt;
+    }
+
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  const sortedTable = useMemo(() => {
+    if (!table || !sort) return table;
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    const rowsWithIdx = table.rows.map((row, idx) => ({ row, idx }));
+    rowsWithIdx.sort((ra, rb) => {
+      const cmp = compareCells(ra.row[sort.col] ?? '', rb.row[sort.col] ?? '');
+      if (cmp !== 0) return cmp * dir;
+      return ra.idx - rb.idx;
+    });
+    return { columns: table.columns, rows: rowsWithIdx.map((r) => r.row) };
+  }, [table, sort]);
 
   async function exportCSV() {
     setError('');
@@ -451,13 +499,24 @@ export default function App() {
                 <table>
                   <thead>
                     <tr>
-                      {table.columns.map((c) => (
-                        <th key={c}>{c}</th>
+                      {table.columns.map((c, idx) => (
+                        <th
+                          key={c}
+                          onClick={() => toggleSort(idx)}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                          title="Clique para ordenar"
+                          aria-sort={
+                            sort?.col === idx ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
+                          }
+                        >
+                          {c}
+                          {sort?.col === idx ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : null}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {table.rows.map((r, idx) => (
+                    {(sortedTable?.rows ?? []).map((r, idx) => (
                       <tr key={idx}>
                         {r.map((cell, cidx) => (
                           <td key={cidx}>{cell}</td>
