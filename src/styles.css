@@ -874,9 +874,9 @@ button:disabled {
   overflow: hidden;
 }
 
-.card > div:last-child {
+.results-area {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   min-height: 0;
 }
 
@@ -886,4 +886,3 @@ button:disabled {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
-

@@ -671,6 +671,10 @@ export default function App() {
 
             <div className="sql-editor-wrapper">
               <CodeMirror
+                theme="dark"
+                height="55vh"
+                minHeight="260px"
+                maxHeight="640px"
                 value={currentSQL}
                 onChange={(value) => updateTabSQL(activeTabId, value)}
                 extensions={[
@@ -829,50 +833,52 @@ export default function App() {
               ) : null}
             </div>
 
-            {error ? (
-              <div className="error" style={{ marginTop: 12 }}>
-                {error}
-              </div>
-            ) : null}
+            <div className="results-area">
+              {error ? (
+                <div className="error" style={{ marginTop: 12 }}>
+                  {error}
+                </div>
+              ) : null}
 
-            {table ? (
-              <div style={{ marginTop: 12 }}>
-                <div className="tableWrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        {table.columns.map((c, idx) => (
-                          <th
-                            key={c}
-                            onClick={() => toggleSort(idx)}
-                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                            title="Clique para ordenar"
-                            aria-sort={
-                              sort?.col === idx ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
-                            }
-                          >
-                            {c}
-                            {sort?.col === idx ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : null}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(sortedTable?.rows ?? []).map((r, idx) => (
-                        <tr key={idx}>
-                          {r.map((cell, cidx) => (
-                            <td key={cidx}>{cell}</td>
+              {table ? (
+                <div style={{ marginTop: 12 }}>
+                  <div className="tableWrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          {table.columns.map((c, idx) => (
+                            <th
+                              key={c}
+                              onClick={() => toggleSort(idx)}
+                              style={{ cursor: 'pointer', userSelect: 'none' }}
+                              title="Clique para ordenar"
+                              aria-sort={
+                                sort?.col === idx ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
+                              }
+                            >
+                              {c}
+                              {sort?.col === idx ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : null}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {(sortedTable?.rows ?? []).map((r, idx) => (
+                          <tr key={idx}>
+                            {r.map((cell, cidx) => (
+                              <td key={cidx}>{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="muted" style={{ marginTop: 12, textAlign: 'center', fontSize: '12px' }}>
+                    📊 Mostrando até 200 linhas
+                  </div>
                 </div>
-                <div className="muted" style={{ marginTop: 12, textAlign: 'center', fontSize: '12px' }}>
-                  📊 Mostrando até 200 linhas
-                </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
