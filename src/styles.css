@@ -39,7 +39,8 @@ body {
   max-width: 1800px;
   margin: 0 auto;
   padding: 24px;
-  height: calc(100vh - 48px);
+  min-height: calc(100vh - 48px);
+  height: auto;
   display: flex;
   flex-direction: column;
 }
@@ -49,7 +50,7 @@ body {
   gap: 16px;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .header {
@@ -772,7 +773,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Tabs */
@@ -871,12 +872,12 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .results-area {
-  flex: 1;
-  overflow: auto;
+  flex: 0 0 auto;
+  overflow: visible;
   min-height: 0;
 }
 
