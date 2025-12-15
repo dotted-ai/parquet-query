@@ -271,15 +271,29 @@ textarea:focus {
 
 .sql-editor-wrapper .cm-editor {
   transition: all 0.2s ease;
+  opacity: 1 !important;
 }
 
 .sql-editor-wrapper .cm-editor:hover {
   border-color: rgba(148, 163, 184, 0.3);
 }
 
+.sql-editor-wrapper .cm-content {
+  opacity: 1 !important;
+}
+
+.sql-editor-wrapper .cm-content * {
+  opacity: 1 !important;
+}
+
+.sql-editor-wrapper .cm-line {
+  opacity: 1 !important;
+}
+
 .sql-editor-wrapper .cm-lineNumbers {
   color: var(--text-muted);
   font-size: 12px;
+  opacity: 1 !important;
 }
 
 .sql-editor-wrapper .cm-lineNumbers .cm-gutterElement {

@@ -287,7 +287,7 @@ export default function App() {
                 sqlLanguage(),
                 EditorView.theme({
                   '&': {
-                    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                    backgroundColor: '#1e1e1e',
                     color: '#f1f5f9',
                     fontSize: '14px',
                     borderRadius: '12px',
@@ -298,44 +298,62 @@ export default function App() {
                     outline: 'none',
                     border: '1px solid #6366f1',
                     boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.1), 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3)',
+                    backgroundColor: '#1e1e1e',
                   },
                   '.cm-content': {
                     padding: '16px',
                     minHeight: '200px',
                     fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
                     lineHeight: '1.6',
+                    color: '#f1f5f9 !important',
                   },
                   '.cm-scroller': {
                     fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
                   },
+                  '.cm-editor': {
+                    color: '#f1f5f9',
+                  },
                   '.cm-keyword': {
-                    color: '#818cf8',
+                    color: '#818cf8 !important',
                     fontWeight: '600',
+                    opacity: '1 !important',
                   },
                   '.cm-string': {
-                    color: '#34d399',
+                    color: '#34d399 !important',
+                    opacity: '1 !important',
                   },
                   '.cm-number': {
-                    color: '#fbbf24',
+                    color: '#fbbf24 !important',
+                    opacity: '1 !important',
                   },
                   '.cm-comment': {
                     color: '#94a3b8',
                     fontStyle: 'italic',
+                    opacity: '1 !important',
                   },
                   '.cm-operator': {
-                    color: '#c084fc',
+                    color: '#c084fc !important',
+                    opacity: '1 !important',
                   },
                   '.cm-builtin': {
-                    color: '#60a5fa',
+                    color: '#60a5fa !important',
+                    opacity: '1 !important',
                   },
                   '.cm-variable': {
-                    color: '#f1f5f9',
+                    color: '#f1f5f9 !important',
+                    opacity: '1 !important',
                   },
                   '.cm-attribute': {
-                    color: '#a78bfa',
+                    color: '#a78bfa !important',
+                    opacity: '1 !important',
                   },
                   '.cm-line': {
-                    color: '#f1f5f9',
+                    color: '#f1f5f9 !important',
+                    opacity: '1 !important',
+                  },
+                  '.cm-text': {
+                    color: '#f1f5f9 !important',
+                    opacity: '1 !important',
                   },
                   '.cm-cursor': {
                     borderLeftColor: '#6366f1',
