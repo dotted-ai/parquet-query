@@ -83,7 +83,8 @@ export default function App() {
 
     try {
       const dirHandle = await (window as any).showDirectoryPicker();
-      const collected = await collectFilesFromDirectoryHandle(dirHandle);
+      const rootPrefix = dirHandle?.name ? String(dirHandle.name) : '';
+      const collected = await collectFilesFromDirectoryHandle(dirHandle, rootPrefix);
       await importFiles(collected.files, collected.meta, dirHandle?.name || 'pasta');
     } catch (e: any) {
       if (e?.name === 'AbortError') return;
@@ -97,7 +98,8 @@ export default function App() {
     if (!list || list.length === 0) return;
     try {
       const collected = collectFilesFromFileList(list);
-      await importFiles(collected.files, collected.meta, 'pasta selecionada');
+      const label = collected.meta[0]?.path?.split('/')?.[0] || 'pasta selecionada';
+      await importFiles(collected.files, collected.meta, label);
     } catch (err: any) {
       setError(err?.message || String(err));
     }
