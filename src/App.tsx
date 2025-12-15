@@ -58,6 +58,7 @@ export default function App() {
   const [resultInfo, setResultInfo] = useState<string>('');
   const [importInfo, setImportInfo] = useState<string>('');
   const [table, setTable] = useState<{ columns: string[]; rows: string[][] }>();
+  const [loadingFiles, setLoadingFiles] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -96,21 +97,26 @@ export default function App() {
     setResultInfo('');
     setImportInfo('');
     setTable(undefined);
+    setLoadingFiles(true);
 
-    await ensureDbReady();
+    try {
+      await ensureDbReady();
 
-    const imported: ImportedFile[] = [];
-    for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i]!;
-      const fileMeta = meta[i]!;
-      const data = await file.arrayBuffer();
-      await registerFileBuffer(fileMeta.path, data);
-      imported.push(fileMeta);
+      const imported: ImportedFile[] = [];
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i]!;
+        const fileMeta = meta[i]!;
+        const data = await file.arrayBuffer();
+        await registerFileBuffer(fileMeta.path, data);
+        imported.push(fileMeta);
+      }
+
+      setFolderName(label);
+      setFiles(imported);
+      await createOrReplaceParquetView(imported, parquetTableName);
+    } finally {
+      setLoadingFiles(false);
     }
-
-    setFolderName(label);
-    setFiles(imported);
-    await createOrReplaceParquetView(imported, parquetTableName);
   }
 
   async function onPickFolder() {
@@ -194,7 +200,7 @@ export default function App() {
         <div className="card">
           <h2>📁 Arquivos</h2>
           <div className="row">
-            <button onClick={onPickFolder} disabled={dbStatus === 'loading'}>
+            <button onClick={onPickFolder} disabled={dbStatus === 'loading' || loadingFiles}>
               {supportsDirectoryPicker ? '📂 Selecionar pasta' : '📂 Selecionar pasta (fallback)'}
             </button>
             <input
@@ -222,7 +228,7 @@ export default function App() {
                 setTable(undefined);
                 setError('');
               }}
-              disabled={dbStatus === 'loading'}
+              disabled={dbStatus === 'loading' || loadingFiles}
             >
               🗑️ Limpar
             </button>
@@ -247,7 +253,14 @@ export default function App() {
           </div>
 
           <div className="filelist">
-            {files.length === 0 ? (
+            {loadingFiles ? (
+              <div className="loader-container">
+                <div className="loader"></div>
+                <div className="muted" style={{ textAlign: 'center', marginTop: '16px', opacity: 0.8 }}>
+                  ⏳ Carregando arquivos...
+                </div>
+              </div>
+            ) : files.length === 0 ? (
               <div className="muted" style={{ textAlign: 'center', padding: '24px', opacity: 0.6 }}>
                 📄 Nenhum arquivo importado ainda.
               </div>
