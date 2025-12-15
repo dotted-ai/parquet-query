@@ -66,6 +66,7 @@ export default function App() {
   const [importInfo, setImportInfo] = useState<string>('');
   const [table, setTable] = useState<{ columns: string[]; rows: string[][] }>();
   const [sort, setSort] = useState<{ col: number; dir: 'asc' | 'desc' } | null>(null);
+  const [rowSearch, setRowSearch] = useState<string>('');
   const [loadingFiles, setLoadingFiles] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -164,6 +165,7 @@ export default function App() {
     setResultInfo('');
     setTable(undefined);
     setSort(null);
+    setRowSearch('');
     try {
       await ensureDbReady();
       const result = await query(sql);
@@ -213,17 +215,27 @@ export default function App() {
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
   }
 
+  const filteredTable = useMemo(() => {
+    if (!table) return table;
+    const q = rowSearch.trim().toLowerCase();
+    if (!q) return table;
+    return {
+      columns: table.columns,
+      rows: table.rows.filter((r) => r.some((cell) => (cell ?? '').toLowerCase().includes(q))),
+    };
+  }, [table, rowSearch]);
+
   const sortedTable = useMemo(() => {
-    if (!table || !sort) return table;
+    if (!filteredTable || !sort) return filteredTable;
     const dir = sort.dir === 'asc' ? 1 : -1;
-    const rowsWithIdx = table.rows.map((row, idx) => ({ row, idx }));
+    const rowsWithIdx = filteredTable.rows.map((row, idx) => ({ row, idx }));
     rowsWithIdx.sort((ra, rb) => {
       const cmp = compareCells(ra.row[sort.col] ?? '', rb.row[sort.col] ?? '');
       if (cmp !== 0) return cmp * dir;
       return ra.idx - rb.idx;
     });
-    return { columns: table.columns, rows: rowsWithIdx.map((r) => r.row) };
-  }, [table, sort]);
+    return { columns: filteredTable.columns, rows: rowsWithIdx.map((r) => r.row) };
+  }, [filteredTable, sort]);
 
   async function exportCSV() {
     setError('');
@@ -489,6 +501,14 @@ export default function App() {
             <button className="secondary" onClick={exportCSV} disabled={running || exporting}>
               {exporting ? '⏳ Exportando…' : '⬇️ Exportar CSV'}
             </button>
+            <input
+              value={rowSearch}
+              onChange={(e) => setRowSearch(e.target.value)}
+              placeholder="Buscar nas linhas…"
+              disabled={!table || running || exporting}
+              style={{ minWidth: 220 }}
+              title="Filtra apenas as linhas exibidas (até 200)"
+            />
             <button
               className="secondary"
               onClick={() => {
@@ -497,6 +517,7 @@ export default function App() {
                 setResultInfo('');
                 setTable(undefined);
                 setSort(null);
+                setRowSearch('');
               }}
               disabled={running || exporting}
               title="Restaura o SQL padrão"
@@ -515,6 +536,11 @@ export default function App() {
               🧪 Exemplo tabela
             </button>
             {resultInfo ? <span className="pill ok">{resultInfo}</span> : null}
+            {table && rowSearch.trim() ? (
+              <span className="pill">
+                {sortedTable?.rows.length ?? 0}/{table.rows.length} linhas
+              </span>
+            ) : null}
           </div>
 
           {error ? (
