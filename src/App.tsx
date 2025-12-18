@@ -261,6 +261,8 @@ export default function App() {
   const [parquetTableName, setParquetTableName] = useState<string>('');
   const [tabs, setTabs] = useState<QueryTab[]>(loadTabsFromStorage);
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id || '1');
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState<string>('');
   const [running, setRunning] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string>('');
@@ -558,6 +560,23 @@ export default function App() {
 
   const visibleTabs = useMemo(() => tabs.filter((t) => t.category === selectedCategory), [tabs, selectedCategory]);
 
+  function startRenameTab(tab: QueryTab) {
+    setRenamingTabId(tab.id);
+    setRenameDraft(tab.name);
+  }
+
+  function commitRenameTab() {
+    if (!renamingTabId) return;
+    updateTabName(renamingTabId, renameDraft);
+    setRenamingTabId(null);
+    setRenameDraft('');
+  }
+
+  function cancelRenameTab() {
+    setRenamingTabId(null);
+    setRenameDraft('');
+  }
+
   return (
     <div className="container">
       <div className="header">
@@ -747,11 +766,30 @@ export default function App() {
                       key={tab.id}
                       className={`tab ${activeTabId === tab.id ? 'active' : ''}`}
                       onClick={() => setActiveTabId(tab.id)}
+                      onDoubleClick={() => startRenameTab(tab)}
+                      title="Duplo clique para renomear"
                     >
-                      <span className="tab-name">
-                        {tab.isDirty && '*'}
-                        {tab.name}
-                      </span>
+                      {renamingTabId === tab.id ? (
+                        <input
+                          type="text"
+                          value={renameDraft}
+                          onChange={(e) => setRenameDraft(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onDoubleClick={(e) => e.stopPropagation()}
+                          autoFocus
+                          style={{ minWidth: 120, fontSize: '13px' }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitRenameTab();
+                            if (e.key === 'Escape') cancelRenameTab();
+                          }}
+                          onBlur={commitRenameTab}
+                        />
+                      ) : (
+                        <span className="tab-name">
+                          {tab.isDirty && '*'}
+                          {tab.name}
+                        </span>
+                      )}
                       <button
                         className="tab-close"
                         onClick={(e) => {
